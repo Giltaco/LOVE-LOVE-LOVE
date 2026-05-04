@@ -5,102 +5,105 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>I Love You ❤</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    background: #000;
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-  #stage {
-    position: relative;
-    width: 0;
-    height: 0;
-  }
-  .ily {
-    position: absolute;
-    font-family: sans-serif;
-    font-weight: 600;
-    white-space: nowrap;
-    color: #ea80b0;
-    transform-origin: center center;
-    pointer-events: none;
-    will-change: transform, opacity, font-size;
-  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#000;width:100vw;height:100vh;overflow:hidden}
+  canvas{display:block}
 </style>
 </head>
 <body>
-<div id="stage"></div>
+<canvas id="c"></canvas>
 <script>
-(function () {
-  const stage  = document.getElementById('stage');
-  const N      = 300;
-  const SCALE  = 15;
-  const SPEED  = 0.004;
-  const LABEL  = 'I love you';
+(function(){
+  const c   = document.getElementById('c');
+  const ctx = c.getContext('2d');
+  const N   = 120;
+  const LABEL = 'I love you';
+  const TAU   = Math.PI * 2;
+  const SPEED = 0.0035;
 
-  /* Ecuación paramétrica del corazón */
-  function heart(t) {
-    const x =  16 * Math.pow(Math.sin(t), 3);
-    const y = -(13 * Math.cos(t)
-              -  5 * Math.cos(2 * t)
-              -  2 * Math.cos(3 * t)
-              -      Math.cos(4 * t));
-    return { x: x * SCALE, y: y * SCALE };
+  let W, H, CX, CY, SCALE;
+
+  function resize(){
+    W = c.width  = window.innerWidth;
+    H = c.height = window.innerHeight;
+    CX = W / 2;
+    CY = H / 2;
+    SCALE = Math.min(W, H) / 38;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  /* Precalcular partículas */
+  const p = new Float32Array(N * 4); /* offset, speed, size, phase */
+  for(let i = 0; i < N; i++){
+    const b = i * 4;
+    p[b]   = (i / N) * TAU;               /* offset */
+    p[b+1] = 0.65 + Math.random() * 0.7;  /* speed multiplier */
+    p[b+2] = 12 + Math.random() * 8;      /* font size px */
+    p[b+3] = Math.random() * TAU;         /* phase for pulse */
   }
 
-  /* Crear elementos */
-  const items = [];
-  for (let i = 0; i < N; i++) {
-    const el = document.createElement('span');
-    el.className  = 'ily';
-    el.textContent = LABEL;
-
-    const baseSize  = 13 + Math.random() * 7;   /* 13–20 px */
-    const offset    = (i / N) * Math.PI * 2;    /* distribuir en el perímetro */
-    const speedMult = 0.7 + Math.random() * 0.6;/* velocidad ligeramente variada */
-    const phase     = Math.random() * Math.PI * 2;
-
-    stage.appendChild(el);
-    items.push({ el, offset, baseSize, speedMult, phase });
-  }
-
-  let last = null;
+  /* Ecuación corazón inline para evitar call overhead */
   let elapsed = 0;
+  let last = 0;
 
-  function frame(ts) {
-    if (!last) last = ts;
-    const dt = (ts - last) / 1000;
+  function frame(ts){
+    const dt = last ? (ts - last) / 1000 : 0;
     last = ts;
     elapsed += dt;
 
-    for (let i = 0; i < N; i++) {
-      const item = items[i];
-      const t = item.offset + elapsed * SPEED * item.speedMult * Math.PI * 2;
+    /* Trail — fill semitransparente en lugar de clearRect */
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle   = '#000';
+    ctx.fillRect(0, 0, W, H);
+    ctx.globalAlpha = 1;
 
-      const { x, y } = heart(t);
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
 
-      /* Pulso suave de tamaño y opacidad */
-      const pulse   = 0.5 + 0.5 * Math.sin(elapsed * 1.8 + item.phase);
-      const sz      = item.baseSize + pulse * 3;
-      const opacity = 0.55 + pulse * 0.45;
+    for(let i = 0; i < N; i++){
+      const b  = i * 4;
+      const t  = p[b] + elapsed * SPEED * p[b+1] * TAU;
+      const st = Math.sin(t);
+      const ct = Math.cos(t);
 
-      /* Brillo variable */
-      const glow1 = Math.floor(8  + pulse * 6);
-      const glow2 = Math.floor(16 + pulse * 12);
+      const hx =  16 * st * st * st;
+      const hy = -(13 * ct - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
 
-      item.el.style.cssText = `
-        left: ${x}px;
-        top: ${y}px;
-        font-size: ${sz.toFixed(1)}px;
-        opacity: ${opacity.toFixed(3)};
-        transform: translate(-50%, -50%);
-        text-shadow: 0 0 ${glow1}px #fff, 0 0 ${glow2}px #ea80b0, 0 0 ${glow2 * 2}px #ea80b0;
-      `;
+      const x = CX + hx * SCALE;
+      const y = CY + hy * SCALE;
+
+      const pulse  = 0.5 + 0.5 * Math.sin(elapsed * 1.6 + p[b+3]);
+      const sz     = p[b+2] + pulse * 3;
+      const alpha  = 0.5 + pulse * 0.5;
+      const blur   = 8 + pulse * 14;
+
+      ctx.globalAlpha   = alpha;
+      ctx.shadowColor   = '#ea80b0';
+      ctx.shadowBlur    = blur;
+      ctx.fillStyle     = '#ea80b0';
+      ctx.font          = `600 ${sz.toFixed(0)}px sans-serif`;
+      ctx.fillText(LABEL, x, y);
     }
+
+    /* Segundo pase: brillo blanco fino */
+    ctx.shadowColor = '#fff';
+    ctx.shadowBlur  = 4;
+    ctx.globalAlpha = 0.18;
+    ctx.fillStyle   = '#fff';
+    for(let i = 0; i < N; i += 3){
+      const b  = i * 4;
+      const t  = p[b] + elapsed * SPEED * p[b+1] * TAU;
+      const st = Math.sin(t);
+      const ct = Math.cos(t);
+      const hx =  16 * st * st * st;
+      const hy = -(13 * ct - 5 * Math.cos(2*t) - 2 * Math.cos(3*t) - Math.cos(4*t));
+      ctx.font = `600 ${(p[b+2] * 0.7).toFixed(0)}px sans-serif`;
+      ctx.fillText(LABEL, CX + hx * SCALE, CY + hy * SCALE);
+    }
+
+    ctx.shadowBlur  = 0;
+    ctx.globalAlpha = 1;
 
     requestAnimationFrame(frame);
   }
